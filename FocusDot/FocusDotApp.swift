@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appDetector: appDetector,
             onToggleDot: { [weak self] visible in
                 if visible {
-                    self?.overlayWindow.showDot()
+                    self?.overlayWindow.showDot(camera: self?.cameraManager.activeCamera)
                 } else {
                     self?.overlayWindow.hideDot()
                 }
@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if shouldShow != preferences.isDotVisible {
                 preferences.isDotVisible = shouldShow
                 if shouldShow {
-                    overlayWindow.showDot()
+                    overlayWindow.showDot(camera: cameraManager.activeCamera)
                 } else {
                     overlayWindow.hideDot()
                 }
@@ -64,18 +64,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         .store(in: &cancellables)
 
+        // Reposition dot when the active camera changes (e.g. switch from built-in to external)
+        cameraManager.$activeCamera
+            .removeDuplicates()
+            .debounce(for: .milliseconds(200), scheduler: RunLoop.main)
+            .sink { [weak self] camera in
+                guard let self, preferences.isDotVisible, camera != nil else { return }
+                overlayWindow.positionNearCamera(on: camera)
+            }
+            .store(in: &cancellables)
+
         // Reset position notification
         NotificationCenter.default.addObserver(
             forName: .resetDotPosition,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.overlayWindow.positionNearCamera()
+            self?.overlayWindow.positionNearCamera(on: self?.cameraManager.activeCamera)
         }
 
         // Show dot if it was visible last time and not in auto mode
         if preferences.isDotVisible && !preferences.isAutoModeEnabled {
-            overlayWindow.showDot()
+            overlayWindow.showDot(camera: cameraManager.activeCamera)
         }
     }
 }
