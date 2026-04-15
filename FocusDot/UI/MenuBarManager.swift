@@ -32,6 +32,8 @@ final class MenuBarManager {
             preferences.$isBouncingEnabled.map { _ in () }.eraseToAnyPublisher(),
             preferences.$dotSize.map { _ in () }.eraseToAnyPublisher(),
             preferences.$dotOpacity.map { _ in () }.eraseToAnyPublisher(),
+            preferences.$dotColor.map { _ in () }.eraseToAnyPublisher(),
+            preferences.$backdrop.map { _ in () }.eraseToAnyPublisher(),
             cameraManager.$isCameraActive.map { _ in () }.eraseToAnyPublisher(),
             appDetector.$isVideoCallAppRunning.map { _ in () }.eraseToAnyPublisher()
         )
@@ -104,6 +106,32 @@ final class MenuBarManager {
         opacityItem.submenu = opacityMenu
         menu.addItem(opacityItem)
 
+        // Color submenu
+        let colorMenu = NSMenu()
+        for dotColor in DotColor.allCases {
+            let item = NSMenuItem(title: dotColor.label, action: #selector(setColor(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = dotColor.rawValue
+            item.state = preferences.dotColor == dotColor ? .on : .off
+            colorMenu.addItem(item)
+        }
+        let colorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
+        colorItem.submenu = colorMenu
+        menu.addItem(colorItem)
+
+        // Backdrop submenu
+        let backdropMenu = NSMenu()
+        for bd in Backdrop.allCases {
+            let item = NSMenuItem(title: bd.label, action: #selector(setBackdrop(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = bd.rawValue
+            item.state = preferences.backdrop == bd ? .on : .off
+            backdropMenu.addItem(item)
+        }
+        let backdropItem = NSMenuItem(title: "Backdrop", action: nil, keyEquivalent: "")
+        backdropItem.submenu = backdropMenu
+        menu.addItem(backdropItem)
+
         menu.addItem(NSMenuItem.separator())
 
         // Reset position
@@ -156,6 +184,18 @@ final class MenuBarManager {
 
     @objc private func setOpacity(_ sender: NSMenuItem) {
         preferences.dotOpacity = Double(sender.tag) / 100.0
+    }
+
+    @objc private func setColor(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let color = DotColor(rawValue: raw) else { return }
+        preferences.dotColor = color
+    }
+
+    @objc private func setBackdrop(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let bd = Backdrop(rawValue: raw) else { return }
+        preferences.backdrop = bd
     }
 
     @objc private func resetPosition() {

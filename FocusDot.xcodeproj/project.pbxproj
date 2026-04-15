@@ -7,15 +7,18 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10001 /* FocusDotApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001; };
-		A10002 /* PreferencesManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10002; };
-		A10003 /* DotOverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10003; };
-		A10004 /* DotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10004; };
-		A10005 /* BounceAnimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10005; };
-		A10006 /* CameraManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10006; };
-		A10007 /* AppDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007; };
-		A10008 /* MenuBarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10008; };
-		A10009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10009; };
+		A10001 /* FocusDotApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001 /* FocusDotApp.swift */; };
+		A10002 /* PreferencesManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10002 /* PreferencesManager.swift */; };
+		A10003 /* DotOverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10003 /* DotOverlayWindow.swift */; };
+		A10004 /* DotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10004 /* DotView.swift */; };
+		A10005 /* BounceAnimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10005 /* BounceAnimator.swift */; };
+		A10006 /* CameraManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10006 /* CameraManager.swift */; };
+		A10007 /* AppDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007 /* AppDetector.swift */; };
+		A10008 /* MenuBarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10008 /* MenuBarManager.swift */; };
+		A10009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10009 /* Assets.xcassets */; };
+		A10010 /* InteractionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10013 /* InteractionManager.swift */; };
+		A10011 /* BlobShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014 /* BlobShape.swift */; };
+		A10012 /* SceneBallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10015 /* SceneBallView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +34,9 @@
 		B10010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10011 /* FocusDot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FocusDot.entitlements; sourceTree = "<group>"; };
 		B10012 /* FocusDot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FocusDot.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10013 /* InteractionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionManager.swift; sourceTree = "<group>"; };
+		B10014 /* BlobShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobShape.swift; sourceTree = "<group>"; };
+		B10015 /* SceneBallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneBallView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,6 +79,9 @@
 				B10003 /* DotOverlayWindow.swift */,
 				B10004 /* DotView.swift */,
 				B10005 /* BounceAnimator.swift */,
+				B10013 /* InteractionManager.swift */,
+				B10014 /* BlobShape.swift */,
+				B10015 /* SceneBallView.swift */,
 			);
 			path = Overlay;
 			sourceTree = "<group>";
@@ -115,7 +124,7 @@
 /* Begin PBXNativeTarget section */
 		E10001 /* FocusDot */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = F10003;
+			buildConfigurationList = F10003 /* Build configuration list for PBXNativeTarget "FocusDot" */;
 			buildPhases = (
 				C10002 /* Sources */,
 				C10001 /* Frameworks */,
@@ -138,14 +147,14 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					E10001 = {
 						CreatedOnToolsVersion = 15.0;
 					};
 				};
 			};
-			buildConfigurationList = F10001;
+			buildConfigurationList = F10001 /* Build configuration list for PBXProject "FocusDot" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -187,6 +196,9 @@
 				A10006 /* CameraManager.swift in Sources */,
 				A10007 /* AppDetector.swift in Sources */,
 				A10008 /* MenuBarManager.swift in Sources */,
+				A10010 /* InteractionManager.swift in Sources */,
+			A10011 /* BlobShape.swift in Sources */,
+			A10012 /* SceneBallView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -212,6 +224,7 @@
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
@@ -222,9 +235,11 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
@@ -239,6 +254,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -263,6 +279,7 @@
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
@@ -273,9 +290,11 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -286,6 +305,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 			};
 			name = Release;
@@ -298,6 +318,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FocusDot/Info.plist;
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -323,6 +344,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FocusDot/Info.plist;
 				INFOPLIST_KEY_LSUIElement = YES;
