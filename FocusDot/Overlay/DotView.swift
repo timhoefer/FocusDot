@@ -1,4 +1,5 @@
 import SwiftUI
+import simd
 
 private func makeNoiseImage(size: Int = 64) -> CGImage? {
     var pixels = [UInt8](repeating: 0, count: size * size * 4)
@@ -29,38 +30,14 @@ struct DotView: View {
         let dotSize = preferences.dotSize
         let blob = BlobShape(pull: activePull, grabWidth: interaction.deformation.grabWidth)
 
-        // Fixed light source — highlight always at top-left of the dot frame
-        let lightX: CGFloat = 0.35
-        let lightY: CGFloat = 0.3
+        let params = BallShadingParams.resolve(animator.shadingState)
+        // Top-left, slightly above the screen plane. SwiftUI y is down, so y < 0 is "up".
+        let light = simd_normalize(SIMD3<Float>(-0.4, -0.3, 0.85))
+        let center = CGPoint(x: dotSize / 2, y: dotSize / 2)
 
         ZStack {
             blob.fill(baseColor)
-
-            // 3D lighting — shifts with deformation toward the light-facing side
-            blob.fill(
-                RadialGradient(
-                    gradient: Gradient(stops: [
-                        .init(color: .white.opacity(0.22), location: 0.0),
-                        .init(color: .white.opacity(0.05), location: 0.3),
-                        .init(color: .clear, location: 0.5),
-                        .init(color: .black.opacity(0.06), location: 0.85),
-                        .init(color: .black.opacity(0.12), location: 1.0),
-                    ]),
-                    center: UnitPoint(x: lightX, y: lightY),
-                    startRadius: 0,
-                    endRadius: dotSize * 0.55
-                )
-            )
-
-            // Specular highlight — follows the light center
-            blob.fill(
-                RadialGradient(
-                    gradient: Gradient(colors: [.white.opacity(0.3), .white.opacity(0.0)]),
-                    center: UnitPoint(x: lightX + 0.02, y: lightY + 0.02),
-                    startRadius: 0,
-                    endRadius: dotSize * 0.13
-                )
-            )
+                .colorEffect(Shader.ballShade(center: center, params: params, light: light))
 
             // Grain texture
             if let noise = noiseImage {

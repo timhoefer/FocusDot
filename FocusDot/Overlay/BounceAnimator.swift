@@ -9,10 +9,14 @@ final class BounceAnimator: ObservableObject {
     /// Stretch vector, derived from the physics simulation each tick.
     @Published var pull: CGSize = .zero
 
+    /// Snapshot of physics state needed for per-pixel shading.
+    /// Updated each tick; kept on `BounceAnimator` so SwiftUI views observe a single source.
+    @Published var shadingState: BallShadingState = .neutral
+
     /// The lumped air-balloon physics. Idle anims, drag, and proximity all push into this.
     let physics = AirBallPhysics()
 
-    private var pullAxis: CGVector = .init(dx: 1, dy: 0)
+    @Published private(set) var pullAxis: CGVector = .init(dx: 1, dy: 0)
     private var idleTimer: Timer?
     private var physicsTimer: Timer?
     private var lastTickTime: CFTimeInterval = 0
@@ -169,6 +173,12 @@ final class BounceAnimator: ObservableObject {
         // through into visible stretch on the other side.
         let stretch = max(0, -physics.x)
         pull = CGSize(width: pullAxis.dx * stretch, height: pullAxis.dy * stretch)
+
+        shadingState = BallShadingState(
+            pullAxis: pullAxis,
+            x: physics.x,
+            R0: physics.p.R0
+        )
     }
 
     deinit {
