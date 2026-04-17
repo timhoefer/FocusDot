@@ -152,16 +152,8 @@ final class SceneBallView: NSView {
         .sink { [weak self] animPull, deformation, offset in
             guard let self else { return }
 
-            let pull: CGSize
-            if deformation.isGrabbed || deformation.jigglePhase > 0 {
-                pull = deformation.pull
-            } else {
-                pull = CGSize(
-                    width: animPull.width + deformation.pull.width,
-                    height: animPull.height + deformation.pull.height
-                )
-            }
-
+            // Physics in BounceAnimator is the single source of truth for stretch.
+            let pull = animPull
             let rawMag = sqrt(pull.width * pull.width + pull.height * pull.height)
             let pullMag = rawMag / self.sphereRadius
             let nowDragging = deformation.isGrabbed && pullMag > 0.4

@@ -36,6 +36,13 @@ final class AirBallPhysics {
 
     func reset() { x = 0; xdot = 0 }
 
+    /// Inject a velocity change. Negative = stretch impulse, positive = compression impulse.
+    func applyImpulse(_ deltaXdot: CGFloat) {
+        xdot += deltaXdot
+        if xdot >  p.vMax { xdot =  p.vMax }
+        if xdot < -p.vMax { xdot = -p.vMax }
+    }
+
     /// Advance one step. `dt` is sub-stepped internally for stability.
     func step(dt: CFTimeInterval) {
         let h = max(1.0 / 240.0, min(dt, 1.0 / 30.0))   // clamp dt

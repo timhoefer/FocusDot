@@ -22,19 +22,12 @@ struct DotView: View {
     @ObservedObject var interaction: InteractionManager
 
     var body: some View {
-        let interactionPull = interaction.deformation.pull
-        let activePull: CGSize = interaction.deformation.isGrabbed || interaction.deformation.jigglePhase > 0
-            ? interactionPull
-            : CGSize(
-                width: animator.pull.width + interactionPull.width,
-                height: animator.pull.height + interactionPull.height
-            )
+        // Physics in BounceAnimator is the single source of truth for stretch/wobble.
+        let activePull = animator.pull
 
         let baseColor = preferences.dotColor.color
         let dotSize = preferences.dotSize
         let blob = BlobShape(pull: activePull, grabWidth: interaction.deformation.grabWidth)
-
-        let pullMag = sqrt(activePull.width * activePull.width + activePull.height * activePull.height)
 
         // Fixed light source — highlight always at top-left of the dot frame
         let lightX: CGFloat = 0.35

@@ -25,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         preferences = PreferencesManager.shared
         animator = BounceAnimator(preferences: preferences)
-        interactionManager = InteractionManager()
+        interactionManager = InteractionManager(animator: animator)
         cameraManager = CameraManager()
         appDetector = AppDetector()
 

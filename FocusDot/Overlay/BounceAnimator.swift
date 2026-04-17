@@ -1,30 +1,58 @@
 import Foundation
 import SwiftUI
 import Combine
+import QuartzCore
 
 final class BounceAnimator: ObservableObject {
     /// Small positional drift (subtle, not the main effect)
     @Published var offset: CGSize = .zero
-    /// Organic blob deformation — stretches, pulses, wobbles
+    /// Stretch vector, derived from the physics simulation each tick.
     @Published var pull: CGSize = .zero
 
-    private var timer: Timer?
-    private var cancellable: AnyCancellable?
+    /// The lumped air-balloon physics. Idle anims, drag, and proximity all push into this.
+    let physics = AirBallPhysics()
+
+    private var pullAxis: CGVector = .init(dx: 1, dy: 0)
+    private var idleTimer: Timer?
+    private var physicsTimer: Timer?
+    private var lastTickTime: CFTimeInterval = 0
+    private var cancellables = Set<AnyCancellable>()
     private let preferences: PreferencesManager
     private var isPaused = false
     private var animationID = 0
 
     init(preferences: PreferencesManager) {
         self.preferences = preferences
-        cancellable = preferences.$isBouncingEnabled
+        physics.p.R0 = max(4, preferences.dotSize / 2)
+        startPhysicsLoop()
+
+        preferences.$isBouncingEnabled
             .sink { [weak self] enabled in
-                if enabled {
-                    self?.startBouncing()
-                } else {
-                    self?.stopBouncing()
-                }
+                if enabled { self?.startBouncing() } else { self?.stopBouncing() }
             }
+            .store(in: &cancellables)
+
+        preferences.$dotSize
+            .sink { [weak self] size in
+                self?.physics.p.R0 = max(4, size / 2)
+            }
+            .store(in: &cancellables)
     }
+
+    // MARK: - Physics-driven public API (used by InteractionManager)
+
+    func setPullAxis(_ axis: CGVector) {
+        let len = sqrt(axis.dx * axis.dx + axis.dy * axis.dy)
+        guard len > 1e-4 else { return }
+        pullAxis = .init(dx: axis.dx / len, dy: axis.dy / len)
+    }
+
+    func setExternalForce(_ f: CGFloat) { physics.externalForce = f }
+    func clearExternalForce() { physics.externalForce = 0 }
+    func applyStretchImpulse(_ magnitude: CGFloat) { physics.applyImpulse(-abs(magnitude)) }
+    func applyCompressionImpulse(_ magnitude: CGFloat) { physics.applyImpulse(abs(magnitude)) }
+
+    // MARK: - Idle animation lifecycle
 
     func startBouncing() {
         stopBouncing()
@@ -32,39 +60,29 @@ final class BounceAnimator: ObservableObject {
     }
 
     func stopBouncing() {
-        timer?.invalidate()
-        timer = nil
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-            offset = .zero
-            pull = .zero
-        }
+        idleTimer?.invalidate()
+        idleTimer = nil
+        physics.reset()
+        offset = .zero
     }
 
-    func bounceNow() {
-        performAnimation()
-    }
+    func bounceNow() { performAnimation() }
 
     func pause() {
         isPaused = true
-        timer?.invalidate()
-        timer = nil
+        idleTimer?.invalidate()
+        idleTimer = nil
     }
 
     func resume() {
         isPaused = false
-        if preferences.isBouncingEnabled {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                pull = .zero
-                offset = .zero
-            }
-            scheduleNext()
-        }
+        if preferences.isBouncingEnabled { scheduleNext() }
     }
 
     private func scheduleNext() {
         guard !isPaused else { return }
         let interval = Double.random(in: 2.5...5.0)
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+        idleTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             guard let self, !self.isPaused else { return }
             self.performAnimation()
             self.scheduleNext()
@@ -73,114 +91,88 @@ final class BounceAnimator: ObservableObject {
 
     private func performAnimation() {
         animationID += 1
-        let currentID = animationID
-
-        // Pick a random animation type
-        let roll = Int.random(in: 0...3)
-        switch roll {
-        case 0: animateStretch(id: currentID)
-        case 1: animatePulse(id: currentID)
-        case 2: animateWobble(id: currentID)
-        default: animateDrift(id: currentID)
+        let id = animationID
+        switch Int.random(in: 0...3) {
+        case 0: animateStretch()
+        case 1: animatePulse()
+        case 2: animateWobble()
+        default: animateDrift(id: id)
         }
     }
 
-    /// Gentle stretch in a random direction — like the dot is yawning
-    private func animateStretch(id: Int) {
-        let angle = Double.random(in: 0...(2 * .pi))
-        let magnitude = Double.random(in: 1.5...3.0)
-        let px = CGFloat(cos(angle) * magnitude)
-        let py = CGFloat(sin(angle) * magnitude)
+    // MARK: - Idle anims as physics impulses
 
-        // Slowly stretch out
-        withAnimation(.spring(response: 0.6, dampingFraction: 0.6)) {
-            pull = CGSize(width: px, height: py)
-        }
-        // Hold briefly, then release
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, self.animationID == id, !self.isPaused else { return }
-            withAnimation(.spring(response: 0.8, dampingFraction: 0.5)) {
-                self.pull = .zero
-            }
-        }
+    private func randomAxis() -> CGVector {
+        let a = Double.random(in: 0...(2 * .pi))
+        return .init(dx: cos(a), dy: sin(a))
     }
 
-    /// Uniform pulse — dot briefly swells and contracts, like a heartbeat
-    private func animatePulse(id: Int) {
-        // A small outward pull in all directions approximated by two quick opposing stretches
-        let mag: CGFloat = 1.5
-
-        // Slight asymmetric swell
-        let angle = Double.random(in: 0...(2 * .pi))
-        let px = CGFloat(cos(angle)) * mag
-        let py = CGFloat(sin(angle)) * mag
-
-        withAnimation(.spring(response: 0.2, dampingFraction: 0.4)) {
-            pull = CGSize(width: px, height: py)
-        }
-        // Quick snap back
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-            guard let self, self.animationID == id, !self.isPaused else { return }
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.4)) {
-                self.pull = .zero
-            }
-        }
+    /// Slow yawn — stretches out, shell snaps it back.
+    private func animateStretch() {
+        setPullAxis(randomAxis())
+        applyStretchImpulse(CGFloat.random(in: 50...90))
     }
 
-    /// Quick wobble — two rapid direction changes, like a shiver
-    private func animateWobble(id: Int) {
-        let angle = Double.random(in: 0...(2 * .pi))
-        let mag: CGFloat = 2.0
-
-        let p1x = CGFloat(cos(angle)) * mag
-        let p1y = CGFloat(sin(angle)) * mag
-
-        // First wobble
-        withAnimation(.spring(response: 0.15, dampingFraction: 0.35)) {
-            pull = CGSize(width: p1x, height: p1y)
-        }
-        // Counter-wobble
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
-            guard let self, self.animationID == id, !self.isPaused else { return }
-            withAnimation(.spring(response: 0.15, dampingFraction: 0.35)) {
-                self.pull = CGSize(width: -p1x * 0.6, height: -p1y * 0.6)
-            }
-        }
-        // Settle
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) { [weak self] in
-            guard let self, self.animationID == id, !self.isPaused else { return }
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
-                self.pull = .zero
-            }
-        }
+    /// Quick swell.
+    private func animatePulse() {
+        setPullAxis(randomAxis())
+        applyStretchImpulse(CGFloat.random(in: 30...55))
     }
 
-    /// Tiny positional drift with a gentle stretch — like floating
+    /// Sharp impulse — underdamped shell rings briefly.
+    private func animateWobble() {
+        setPullAxis(randomAxis())
+        applyStretchImpulse(CGFloat.random(in: 70...130))
+    }
+
+    /// Tiny positional drift with a gentle stretch in the same direction.
     private func animateDrift(id: Int) {
         let angle = Double.random(in: 0...(2 * .pi))
         let driftDist = Double.random(in: 1.0...2.0)
         let dx = CGFloat(cos(angle) * driftDist)
         let dy = CGFloat(sin(angle) * driftDist)
-        // Slight stretch in drift direction
-        let stretchMag = Double.random(in: 0.8...1.5)
-        let sx = CGFloat(cos(angle) * stretchMag)
-        let sy = CGFloat(sin(angle) * stretchMag)
 
         withAnimation(.spring(response: 0.7, dampingFraction: 0.6)) {
             offset = CGSize(width: dx, height: dy)
-            pull = CGSize(width: sx, height: sy)
         }
+        setPullAxis(.init(dx: cos(angle), dy: sin(angle)))
+        applyStretchImpulse(CGFloat.random(in: 25...45))
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
             guard let self, self.animationID == id, !self.isPaused else { return }
             withAnimation(.spring(response: 0.9, dampingFraction: 0.55)) {
                 self.offset = .zero
-                self.pull = .zero
             }
         }
     }
 
+    // MARK: - Physics loop
+
+    private func startPhysicsLoop() {
+        physicsTimer?.invalidate()
+        lastTickTime = 0
+        let t = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            self?.tick()
+        }
+        RunLoop.main.add(t, forMode: .common)
+        physicsTimer = t
+    }
+
+    private func tick() {
+        let now = CACurrentMediaTime()
+        let dt = lastTickTime == 0 ? 1.0 / 60.0 : now - lastTickTime
+        lastTickTime = now
+        physics.step(dt: dt)
+
+        // Only stretch (x < 0) shows in the pull channel SceneBallView already consumes.
+        // Compression (x > 0) still affects dynamics, so the rebound naturally swings
+        // through into visible stretch on the other side.
+        let stretch = max(0, -physics.x)
+        pull = CGSize(width: pullAxis.dx * stretch, height: pullAxis.dy * stretch)
+    }
+
     deinit {
-        timer?.invalidate()
+        idleTimer?.invalidate()
+        physicsTimer?.invalidate()
     }
 }
