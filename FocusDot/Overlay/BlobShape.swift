@@ -31,20 +31,26 @@ struct BlobShape: Shape {
         let k: CGFloat = 0.5522847498
         let gw = grabWidth  // 0 = thin edge grab, 1 = wide center grab
 
-        let bodyR = r * (1.0 - t * 0.12)
         // Tip tracks cursor closely — starts at ~90% of pull distance, tapers to ~70% at high stretch
         let tipExtend = pullMag * (0.9 - t * 0.2)
+
+        // Volume-conserving contraction: model the pulled region as an elliptical lobe
+        // and shrink the body so total area stays ≈ π*r².
+        // Lobe area ≈ π/2 * tipExtend * tipHalfWidth
+        let tipHalfWidth = r * (0.15 + gw * 0.45) * t + pullMag * 0.08
+        let lobeArea = (.pi / 2) * tipExtend * tipHalfWidth
+        let areaRatio = max(0.35, 1.0 - lobeArea / (.pi * r * r))
+        let bodyR = r * sqrt(areaRatio)
+
         let frontX = bodyR + tipExtend
 
         // CP1: at bodyR height (no ledge), forward position
         let cp1Ax = bodyR * k + t * (frontX * 0.55 - bodyR * k)
         let cp1Perp = bodyR
 
-        // Front ball width scales with grabWidth:
-        // Edge grab (gw≈0.15): thin front, narrow handles → pinched pull
-        // Center grab (gw≈0.9): wide front, big handles → chunky pull
-        let frontBallTarget = bodyR * (0.3 + gw * 0.9)  // 0.3r to 1.2r based on grab
-        let frontBallW = bodyR * k + t * (frontBallTarget - bodyR * k)
+        // Front ball width scales with grabWidth but bounded by body contraction
+        let frontBallTarget = bodyR * (0.3 + gw * 0.9)
+        let frontBallW = bodyR * k + t * (min(frontBallTarget, bodyR * 0.8) - bodyR * k)
 
         // 4 anchors
         let back  = tw(-bodyR, 0)

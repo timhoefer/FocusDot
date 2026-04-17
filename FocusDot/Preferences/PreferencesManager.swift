@@ -59,6 +59,24 @@ final class PreferencesManager: ObservableObject {
     @Published var backdrop: Backdrop {
         didSet { UserDefaults.standard.set(backdrop.rawValue, forKey: "backdrop") }
     }
+    @Published var isRepositionMode: Bool = false
+    /// Temporarily stores the position during reposition mode before confirmation
+    var pendingPosition: CGPoint? = nil
+    /// The position before entering reposition mode, for cancellation
+    var preRepositionPosition: CGPoint? = nil
+    @Published var customPosition: CGPoint? {
+        didSet {
+            if let p = customPosition {
+                UserDefaults.standard.set(p.x, forKey: "customPositionX")
+                UserDefaults.standard.set(p.y, forKey: "customPositionY")
+                UserDefaults.standard.set(true, forKey: "hasCustomPosition")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "customPositionX")
+                UserDefaults.standard.removeObject(forKey: "customPositionY")
+                UserDefaults.standard.set(false, forKey: "hasCustomPosition")
+            }
+        }
+    }
 
     private init() {
         let defaults = UserDefaults.standard
@@ -83,5 +101,11 @@ final class PreferencesManager: ObservableObject {
         self.isBouncingEnabled = defaults.bool(forKey: "isBouncingEnabled")
         self.isDotVisible = defaults.bool(forKey: "isDotVisible")
         self.backdrop = Backdrop(rawValue: defaults.string(forKey: "backdrop") ?? "") ?? .none
+        if defaults.bool(forKey: "hasCustomPosition") {
+            self.customPosition = CGPoint(
+                x: defaults.double(forKey: "customPositionX"),
+                y: defaults.double(forKey: "customPositionY")
+            )
+        }
     }
 }

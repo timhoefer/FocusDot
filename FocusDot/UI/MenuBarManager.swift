@@ -34,6 +34,7 @@ final class MenuBarManager {
             preferences.$dotOpacity.map { _ in () }.eraseToAnyPublisher(),
             preferences.$dotColor.map { _ in () }.eraseToAnyPublisher(),
             preferences.$backdrop.map { _ in () }.eraseToAnyPublisher(),
+            preferences.$isRepositionMode.map { _ in () }.eraseToAnyPublisher(),
             cameraManager.$isCameraActive.map { _ in () }.eraseToAnyPublisher(),
             appDetector.$isVideoCallAppRunning.map { _ in () }.eraseToAnyPublisher()
         )
@@ -134,10 +135,26 @@ final class MenuBarManager {
 
         menu.addItem(NSMenuItem.separator())
 
-        // Reset position
-        let resetItem = NSMenuItem(title: "Reset Position", action: #selector(resetPosition), keyEquivalent: "r")
-        resetItem.target = self
-        menu.addItem(resetItem)
+        if preferences.isRepositionMode {
+            let confirmItem = NSMenuItem(title: "Confirm Position", action: #selector(confirmReposition), keyEquivalent: "\r")
+            confirmItem.target = self
+            menu.addItem(confirmItem)
+
+            let cancelItem = NSMenuItem(title: "Cancel Reposition", action: #selector(cancelReposition), keyEquivalent: "\u{1b}")
+            cancelItem.target = self
+            menu.addItem(cancelItem)
+        } else {
+            let repoItem = NSMenuItem(title: "Reposition Dot…", action: #selector(enterRepositionMode), keyEquivalent: "p")
+            repoItem.target = self
+            menu.addItem(repoItem)
+
+            // Reset position (only visible when a custom position is set)
+            if preferences.customPosition != nil {
+                let resetItem = NSMenuItem(title: "Reset Position", action: #selector(resetPosition), keyEquivalent: "r")
+                resetItem.target = self
+                menu.addItem(resetItem)
+            }
+        }
 
         menu.addItem(NSMenuItem.separator())
 
@@ -198,7 +215,35 @@ final class MenuBarManager {
         preferences.backdrop = bd
     }
 
+    @objc private func enterRepositionMode() {
+        // Save current position so we can revert on cancel
+        preferences.preRepositionPosition = preferences.customPosition
+        preferences.pendingPosition = nil
+        preferences.isRepositionMode = true
+    }
+
+    @objc private func confirmReposition() {
+        // Save the pending position as the new custom position
+        if let pending = preferences.pendingPosition {
+            preferences.customPosition = pending
+        }
+        preferences.pendingPosition = nil
+        preferences.preRepositionPosition = nil
+        preferences.isRepositionMode = false
+    }
+
+    @objc private func cancelReposition() {
+        // Revert to the position before entering reposition mode
+        preferences.customPosition = preferences.preRepositionPosition
+        preferences.pendingPosition = nil
+        preferences.preRepositionPosition = nil
+        preferences.isRepositionMode = false
+        NotificationCenter.default.post(name: .resetDotPosition, object: nil)
+    }
+
     @objc private func resetPosition() {
+        preferences.customPosition = nil
+        preferences.isRepositionMode = false
         NotificationCenter.default.post(name: .resetDotPosition, object: nil)
     }
 

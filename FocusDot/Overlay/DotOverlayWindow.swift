@@ -43,10 +43,11 @@ final class DotOverlayWindow: NSWindow {
         self.isOpaque = false
         self.hasShadow = false
         self.level = .floating
-        self.ignoresMouseEvents = false
+        self.ignoresMouseEvents = true
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         self.isReleasedWhenClosed = false
         self.acceptsMouseMovedEvents = true
+        self.isMovable = false
 
         let dotView = DotView(preferences: preferences, animator: animator, interaction: interactionManager)
         hostingView = NSHostingView(rootView: dotView)
@@ -58,16 +59,36 @@ final class DotOverlayWindow: NSWindow {
         self.contentView = passthroughView
 
         positionNearCamera(on: nil)
+
+        interactionManager.onOverDotChanged = { [weak self] overDot in
+            self?.ignoresMouseEvents = !overDot
+        }
     }
 
 
+    // Prevent macOS from constraining the window to the visible screen area
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        return frameRect
+    }
+
     func positionNearCamera(on camera: ActiveCamera?) {
+        // Use pending position during reposition, or saved custom position
+        let custom = preferences.pendingPosition ?? preferences.customPosition
+        if let custom {
+            let windowSize: CGFloat = 200
+            let x = custom.x - windowSize / 2
+            let y = custom.y - windowSize / 2
+            setFrame(NSRect(x: x, y: y, width: windowSize, height: windowSize), display: true)
+            updateInteractionCenter()
+            return
+        }
+
         let screen = screenForCamera(camera)
         let screenFrame = screen.frame
 
         let windowSize: CGFloat = 200
         let x = screenFrame.midX - windowSize / 2
-        let y = screenFrame.maxY - windowSize
+        let y = screen.visibleFrame.maxY - windowSize / 2 - 30
 
         setFrame(NSRect(x: x, y: y, width: windowSize, height: windowSize), display: true)
         updateInteractionCenter()
@@ -76,6 +97,16 @@ final class DotOverlayWindow: NSWindow {
     func showDot(camera: ActiveCamera? = nil) {
         positionNearCamera(on: camera)
         orderFront(nil)
+    }
+
+    /// Move the dot center to a screen coordinate (stores as pending until confirmed)
+    func moveDotTo(screenPoint: CGPoint) {
+        let windowSize: CGFloat = 200
+        let x = screenPoint.x - windowSize / 2
+        let y = screenPoint.y - windowSize / 2
+        setFrame(NSRect(x: x, y: y, width: windowSize, height: windowSize), display: true)
+        updateInteractionCenter()
+        preferences.pendingPosition = screenPoint
     }
 
     func hideDot() {

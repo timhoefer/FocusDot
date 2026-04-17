@@ -69,14 +69,119 @@ struct DotView: View {
                 )
             )
 
+
+            // Depression effect — lighting depends on where on the ball you press.
+            // Concavity inverts the surface normal: bright areas darken, dark areas lighten.
+            if let pressPoint = interaction.deformation.pressPoint, interaction.deformation.pressDepth > 0 {
+                let depth = interaction.deformation.pressDepth
+                let pr = interaction.deformation.pressRadius
+                let pressRadius = dotSize * pr
+                let shift = pr * 0.35
+
+                // How lit is this area? 0 = dark (bottom-right), 1 = bright (top-left)
+                // Light is at (0.35, 0.3) in unit coords
+                let dx = pressPoint.x - 0.35
+                let dy = pressPoint.y - 0.3
+                let distFromLight = sqrt(dx * dx + dy * dy)
+                let brightness = max(0, 1.0 - distFromLight * 1.8)  // 1 at light, 0 far away
+
+                // Shadow/highlight direction always follows light vector from press point
+                let lightDirX: CGFloat = pressPoint.x - 0.35
+                let lightDirY: CGFloat = pressPoint.y - 0.3
+                let lightDist = max(sqrt(lightDirX * lightDirX + lightDirY * lightDirY), 0.01)
+                let normX = lightDirX / lightDist
+                let normY = lightDirY / lightDist
+
+                // Bright areas: light fills the bowl — strong highlight, minimal shadow
+                // Dark areas: bowl is in shadow — strong shadow, faint highlight on far wall
+                let shadowStrength = 0.25 - brightness * 0.23
+                let highlightStrength = 0.06 + brightness * 0.30
+
+                // Shadow — on the side facing the light (rim blocks light from reaching inner wall)
+                blob.fill(
+                    RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .black.opacity(shadowStrength * depth), location: 0.0),
+                            .init(color: .black.opacity(shadowStrength * 0.3 * depth), location: 0.55),
+                            .init(color: .clear, location: 0.85),
+                        ]),
+                        center: UnitPoint(
+                            x: pressPoint.x - normX * shift,
+                            y: pressPoint.y - normY * shift
+                        ),
+                        startRadius: 0,
+                        endRadius: pressRadius
+                    )
+                )
+
+                // Highlight — on the far side (inner wall faces the light)
+                blob.fill(
+                    RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .white.opacity(highlightStrength * depth), location: 0.0),
+                            .init(color: .white.opacity(highlightStrength * 0.3 * depth), location: 0.55),
+                            .init(color: .clear, location: 0.85),
+                        ]),
+                        center: UnitPoint(
+                            x: pressPoint.x + normX * shift,
+                            y: pressPoint.y + normY * shift
+                        ),
+                        startRadius: 0,
+                        endRadius: pressRadius
+                    )
+                )
+
+            }
+
             // Grain texture
             if let noise = noiseImage {
                 blob.fill(ImagePaint(image: Image(decorative: noise, scale: 2)))
                     .blendMode(.overlay)
                     .opacity(0.08)
             }
+
+            // Material translucency — thin regions carve alpha so the background subtly shows through.
+            if pullMag > 0.5 {
+                let pullIntensity = min(pullMag / 14.0, 1.0)
+                let dirX = activePull.width / pullMag
+                let dirY = activePull.height / pullMag
+                let tipOffset: CGFloat = 0.38 * pullIntensity
+                blob.fill(
+                    RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .black.opacity(0.35 * pullIntensity), location: 0.0),
+                            .init(color: .black.opacity(0.12 * pullIntensity), location: 0.5),
+                            .init(color: .clear, location: 1.0),
+                        ]),
+                        center: UnitPoint(x: 0.5 + dirX * tipOffset, y: 0.5 + dirY * tipOffset),
+                        startRadius: 0,
+                        endRadius: dotSize * (0.25 + 0.2 * pullIntensity)
+                    )
+                )
+                .blendMode(.destinationOut)
+            }
+
+            if let pressPoint = interaction.deformation.pressPoint, interaction.deformation.pressDepth > 0 {
+                let depth = interaction.deformation.pressDepth
+                let pressRadius = dotSize * interaction.deformation.pressRadius
+                blob.fill(
+                    RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .black.opacity(0.30 * depth), location: 0.0),
+                            .init(color: .black.opacity(0.10 * depth), location: 0.55),
+                            .init(color: .clear, location: 1.0),
+                        ]),
+                        center: pressPoint,
+                        startRadius: 0,
+                        endRadius: pressRadius * 0.9
+                    )
+                )
+                .blendMode(.destinationOut)
+            }
         }
+        .compositingGroup()
         .frame(width: dotSize, height: dotSize)
+        .scaleEffect(interaction.deformation.squish)
         .background(
             Group {
                 if preferences.backdrop != .none {
@@ -88,9 +193,13 @@ struct DotView: View {
                 }
             }
         )
-        .scaleEffect(interaction.deformation.squish)
         .opacity(preferences.dotOpacity)
-        .offset(animator.offset)
+        .offset(
+            CGSize(
+                width: animator.offset.width + interaction.deformation.nudge.width,
+                height: animator.offset.height + interaction.deformation.nudge.height
+            )
+        )
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: dotSize)
         .animation(.easeInOut(duration: 0.2), value: preferences.dotOpacity)
         .frame(width: 200, height: 200)

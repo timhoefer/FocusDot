@@ -43,6 +43,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.animator.resume()
         }
 
+        // Reposition mode: dragging moves the ball
+        interactionManager.onReposition = { [weak self] screenPoint in
+            self?.overlayWindow.moveDotTo(screenPoint: screenPoint)
+        }
+
+        // Sync reposition mode flag
+        preferences.$isRepositionMode
+            .sink { [weak self] mode in
+                self?.interactionManager.isRepositionMode = mode
+            }
+            .store(in: &cancellables)
+
         // Keep interaction manager in sync with dot position
         animator.$offset
             .sink { [weak self] _ in
