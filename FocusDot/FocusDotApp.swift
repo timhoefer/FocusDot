@@ -97,6 +97,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        preferences.$isColorPickerOpen
+            .sink { [weak self] open in
+                self?.overlayWindow.setColorPickerOpen(open)
+            }
+            .store(in: &cancellables)
+
         // Keep interaction manager in sync with dot position
         animator.$offset
             .sink { [weak self] _ in

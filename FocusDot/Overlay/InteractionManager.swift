@@ -19,9 +19,6 @@ struct DotDeformation: Equatable {
     var pressDepth: CGFloat = 0
     /// Depression radius as fraction of dot size (grows with hold duration)
     var pressRadius: CGFloat = 0.22
-    /// Positional nudge (moves the whole ball, does not deform it)
-    var nudge: CGSize = .zero
-
     static let neutral = DotDeformation()
 }
 
@@ -39,10 +36,17 @@ final class InteractionManager: ObservableObject {
     private var wasInProximity = false
     private var isShowingHandCursor = false
     private var isShowingClosedHand = false
+    private var isShowingPointingHand = false
     private var jiggleCounter = 0
     private var pressTimer: Timer?
     private var pressStartTime: Date?
     private var currentPressPoint: UnitPoint?
+    private var pressDownAt: CGPoint = .zero
+
+    /// Max press duration that still counts as a slap (vs. a long press / drag).
+    private let slapMaxDuration: TimeInterval = 0.18
+    /// Max cursor movement during the press that still counts as a slap.
+    private let slapMaxMovement: CGFloat = 5
     private var grabAngle: CGFloat = 0  // initial pull angle when drag begins
     private var hasLockedAngle = false
 
@@ -127,6 +131,7 @@ final class InteractionManager: ObservableObject {
 
                     // Ramp up squish and depression while holding
                     pressStartTime = Date()
+                    pressDownAt = mouse
                     pressTimer?.invalidate()
                     pressTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
                         self?.updatePressRamp()
@@ -161,8 +166,21 @@ final class InteractionManager: ObservableObject {
                     isShowingHandCursor = false
                 }
                 isShowingClosedHand = false
+                isShowingPointingHand = false
                 hasLockedAngle = false
                 onOverDotChanged?(false)
+
+                // Quick click without movement → slap. Skip the normal drag
+                // release / depression jiggle and bounce away from the cursor.
+                let clickDuration = Date().timeIntervalSince(pressStartTime ?? Date())
+                let movedDist = distance(mouse, pressDownAt)
+                if !isRepositionMode,
+                   clickDuration < slapMaxDuration,
+                   movedDist < slapMaxMovement {
+                    triggerSlap(from: pressDownAt)
+                    return
+                }
+
                 // How stretched was the ball at release? 0→1
                 let releasePull = deformation.pull
                 let releaseMag = sqrt(releasePull.width * releasePull.width + releasePull.height * releasePull.height)
@@ -219,58 +237,51 @@ final class InteractionManager: ObservableObject {
         }
     }
 
-    /// Trigger the nudge only when the cursor makes direct contact with the ball.
     private func checkProximity(mouseScreen: CGPoint) {
         let dist = distance(mouseScreen, dotScreenCenter)
         let overDot = dist <= dotRadius + 8
-
-        if overDot && !wasInProximity {
-            // Cursor just touched the ball — nudge it away
-            triggerJiggle(mouseScreen: mouseScreen)
-        }
-
         wasInProximity = overDot
 
         // Show hand cursor when hovering over the dot and toggle window passthrough
         if overDot && !isShowingHandCursor {
             onOverDotChanged?(true)
-            NSCursor.pointingHand.push()
+            NSCursor.openHand.push()
             isShowingHandCursor = true
         } else if !overDot && isShowingHandCursor {
             NSCursor.pop()
             isShowingHandCursor = false
+            isShowingPointingHand = false
             onOverDotChanged?(false)
         }
     }
 
-    /// Subtle positional nudge — the ball is pushed opposite to where the cursor entered its field, then snaps back.
-    private func triggerJiggle(mouseScreen: CGPoint) {
-        jiggleCounter += 1
-        let currentJiggle = jiggleCounter
-
-        // Vector from ball center to cursor, flipped into SwiftUI coords (y grows downward)
-        let dx = mouseScreen.x - dotScreenCenter.x
-        let dy = -(mouseScreen.y - dotScreenCenter.y)
+    /// Quick slap — the ball jiggles AWAY from where the cursor struck.
+    /// Underdamped spring on the return rings out as a natural wobble.
+    private func triggerSlap(from cursor: CGPoint) {
+        // Vector from cursor to ball, flipped into SwiftUI coords (y-down).
+        let dx = dotScreenCenter.x - cursor.x
+        let dy = cursor.y - dotScreenCenter.y
         let mag = sqrt(dx * dx + dy * dy)
         guard mag > 0.01 else { return }
 
-        // Push opposite to the cursor — small so it reads as a soft recoil
-        let nudgeMag: CGFloat = 2.5
-        let nudgeX = -dx / mag * nudgeMag
-        let nudgeY = -dy / mag * nudgeMag
+        let slapMag: CGFloat = 3.0
+        let pullX = (dx / mag) * slapMag
+        let pullY = (dy / mag) * slapMag
 
-        // Drift out gently — longer response = slower, floatier motion
-        withAnimation(.spring(response: 0.55, dampingFraction: 0.75)) {
+        jiggleCounter += 1
+        let jid = jiggleCounter
+
+        // Small impact pose, then a high-frequency / low-damping spring rings out
+        // many tiny oscillations — reads as a vibration rather than a swing.
+        withAnimation(.spring(response: 0.05, dampingFraction: 0.32)) {
             deformation = DotDeformation(
-                jigglePhase: currentJiggle,
-                nudge: CGSize(width: nudgeX, height: nudgeY)
+                pull: CGSize(width: pullX, height: pullY),
+                jigglePhase: jid
             )
         }
-
-        // Float back slowly — like a balloon drifting back down onto a fingertip
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            guard let self, self.jiggleCounter == currentJiggle, !self.isDragging else { return }
-            withAnimation(.spring(response: 1.6, dampingFraction: 0.9)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self, self.jiggleCounter == jid, !self.isDragging else { return }
+            withAnimation(.spring(response: 0.14, dampingFraction: 0.18)) {
                 self.deformation = .neutral
             }
         }
@@ -284,6 +295,14 @@ final class InteractionManager: ObservableObject {
         }
 
         let elapsed = Date().timeIntervalSince(startTime)
+
+        // Past the slap window → this is a long press. Swap openHand → pointingHand.
+        if elapsed > slapMaxDuration && !isShowingPointingHand && !isShowingClosedHand {
+            if isShowingHandCursor { NSCursor.pop() }
+            NSCursor.pointingHand.push()
+            isShowingHandCursor = true
+            isShowingPointingHand = true
+        }
         // Ease-out curve: ramps quickly at first, asymptotically approaches max over ~1.5s
         let t = min(1.0, 1.0 - exp(-elapsed * 2.5))
 

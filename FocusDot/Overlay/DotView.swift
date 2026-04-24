@@ -270,14 +270,23 @@ struct DotView: View {
             }
         )
         .opacity(preferences.dotOpacity)
-        .offset(
-            CGSize(
-                width: animator.offset.width + interaction.deformation.nudge.width,
-                height: animator.offset.height + interaction.deformation.nudge.height
-            )
-        )
+        .offset(animator.offset)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: dotSize)
         .animation(.easeInOut(duration: 0.2), value: preferences.dotOpacity)
+        .overlay(
+            ColorPickerOverlay(
+                isOpen: preferences.isColorPickerOpen,
+                dotSize: dotSize,
+                currentColor: preferences.dotColor,
+                onPick: { newColor in
+                    preferences.isColorPickerOpen = false
+                    guard newColor != preferences.dotColor else { return }
+                    animator.animateRecreate {
+                        preferences.dotColor = newColor
+                    }
+                }
+            )
+        )
         .frame(width: 200, height: 200)
     }
 

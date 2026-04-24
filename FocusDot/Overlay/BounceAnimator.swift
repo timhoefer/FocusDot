@@ -69,6 +69,21 @@ final class BounceAnimator: ObservableObject {
         }
     }
 
+    /// Shrink → run `change` (e.g. swap color) → grow back. The dot looks like
+    /// it was destroyed and re-formed in the new state.
+    func animateRecreate(during change: @escaping () -> Void) {
+        let shrinkDuration: TimeInterval = 0.18
+        withAnimation(.easeIn(duration: shrinkDuration)) {
+            visibilityScale = 0
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + shrinkDuration + 0.02) { [weak self] in
+            change()
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.55)) {
+                self?.visibilityScale = 1.0
+            }
+        }
+    }
+
     /// Anticipation bounce → shrink to 0. `completion` runs after the shrink finishes.
     func animateHide(completion: @escaping () -> Void) {
         let bounceDuration: TimeInterval = 0.18

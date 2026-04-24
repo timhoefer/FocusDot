@@ -4,20 +4,23 @@ import Combine
 import AppKit
 
 enum DotColor: String, CaseIterable {
-    case green, red, blue, yellow, white, cyan, orange, pink, peach, coffee
+    // Ordered for the radial picker — clockwise from the top of the ring.
+    case black, white, yellow, peach, orange, red, pink, purple, blue, cyan, green, coffee
 
     var color: Color {
         switch self {
-        case .green:  return .green
-        case .red:    return .red
-        case .blue:   return .blue
-        case .yellow: return .yellow
+        case .black:  return .black
         case .white:  return .white
-        case .cyan:   return .cyan
+        case .yellow: return .yellow
+        case .peach:  return Color(red: 1.00, green: 0.68, blue: 0.52)
         case .orange: return .orange
+        case .red:    return .red
         case .pink:   return .pink
-        case .peach:  return Color(red: 0.93, green: 0.76, blue: 0.65)
-        case .coffee: return Color(red: 0.55, green: 0.35, blue: 0.22)
+        case .purple: return .purple
+        case .blue:   return .blue
+        case .cyan:   return .cyan
+        case .green:  return .green
+        case .coffee: return Color(red: 0.40, green: 0.25, blue: 0.15)
         }
     }
 
@@ -95,6 +98,7 @@ final class PreferencesManager: ObservableObject {
         }
     }
     @Published var isRepositionMode: Bool = false
+    @Published var isColorPickerOpen: Bool = false
     /// Temporarily stores the position during reposition mode before confirmation
     var pendingPosition: CGPoint? = nil
     /// The position before entering reposition mode, for cancellation
@@ -153,7 +157,7 @@ final class PreferencesManager: ObservableObject {
 
         self.dotSize = CGFloat(defaults.double(forKey: "dotSize"))
         self.dotOpacity = defaults.double(forKey: "dotOpacity")
-        self.dotColor = DotColor(rawValue: defaults.string(forKey: "dotColor") ?? "") ?? .green
+        self.dotColor = DotColor(rawValue: defaults.string(forKey: "dotColor") ?? "") ?? .blue
         self.isAutoModeEnabled = defaults.bool(forKey: "isAutoModeEnabled")
         self.isBouncingEnabled = defaults.bool(forKey: "isBouncingEnabled")
         self.isDotVisible = defaults.bool(forKey: "isDotVisible")

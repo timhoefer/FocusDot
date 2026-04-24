@@ -8,9 +8,11 @@ final class PassthroughView: NSView {
     /// During reposition mode the placeholder + confirm button extend beyond the
     /// dot radius, so accept clicks anywhere in our bounds.
     var isRepositionMode = false
+    /// Same — picker swatches sit outside the dot circle.
+    var isColorPickerOpen = false
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        if isRepositionMode {
+        if isRepositionMode || isColorPickerOpen {
             return super.hitTest(point)
         }
         let centerX = bounds.midX + bounceOffset.width
@@ -75,10 +77,8 @@ final class DotOverlayWindow: NSWindow {
 
         interactionManager.onOverDotChanged = { [weak self] overDot in
             guard let self else { return }
-            // Reposition mode keeps the window click-receptive across the whole
-            // 200pt area (placeholder + ✓ button), so don't let the hover toggle
-            // re-enable passthrough.
-            if self.preferences.isRepositionMode { return }
+            // Reposition + color picker need the whole 200pt area click-receptive.
+            if self.preferences.isRepositionMode || self.preferences.isColorPickerOpen { return }
             self.ignoresMouseEvents = !overDot
         }
     }
@@ -164,6 +164,38 @@ final class DotOverlayWindow: NSWindow {
 
         passthroughView?.dotRadius = preferences.dotSize / 2
         passthroughView?.bounceOffset = animator.offset
+    }
+
+    private var frameBeforePicker: NSRect?
+
+    /// Open/close the color picker. Slides the window into a screen-safe rect
+    /// when opening so the swatch ring isn't clipped by the menu bar / edges.
+    func setColorPickerOpen(_ open: Bool) {
+        passthroughView.isColorPickerOpen = open
+        if open {
+            ignoresMouseEvents = false
+            frameBeforePicker = frame
+            guard let visible = (self.screen ?? NSScreen.main)?.visibleFrame else { return }
+            var f = frame
+            if f.maxY > visible.maxY { f.origin.y = visible.maxY - f.height }
+            if f.minY < visible.minY { f.origin.y = visible.minY }
+            if f.maxX > visible.maxX { f.origin.x = visible.maxX - f.width }
+            if f.minX < visible.minX { f.origin.x = visible.minX }
+            if f != frame {
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = 0.28
+                    ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    self.animator().setFrame(f, display: true)
+                }
+            }
+        } else if let saved = frameBeforePicker {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.25
+                self.animator().setFrame(saved, display: true)
+            }
+            frameBeforePicker = nil
+        }
+        updateInteractionCenter()
     }
 
     /// Sample the wallpaper under the current dot position.

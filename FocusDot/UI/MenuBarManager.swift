@@ -41,6 +41,7 @@ final class MenuBarManager {
             preferences.$isSystemDark.map { _ in () }.eraseToAnyPublisher(),
             preferences.$isAmbientShadingEnabled.map { _ in () }.eraseToAnyPublisher(),
             preferences.$isRepositionMode.map { _ in () }.eraseToAnyPublisher(),
+            preferences.$isColorPickerOpen.map { _ in () }.eraseToAnyPublisher(),
             cameraManager.$isCameraActive.map { _ in () }.eraseToAnyPublisher(),
             appDetector.$isVideoCallAppRunning.map { _ in () }.eraseToAnyPublisher()
         )
@@ -113,17 +114,9 @@ final class MenuBarManager {
         opacityItem.submenu = opacityMenu
         menu.addItem(opacityItem)
 
-        // Color submenu
-        let colorMenu = NSMenu()
-        for dotColor in DotColor.allCases {
-            let item = NSMenuItem(title: dotColor.label, action: #selector(setColor(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = dotColor.rawValue
-            item.state = preferences.dotColor == dotColor ? .on : .off
-            colorMenu.addItem(item)
-        }
-        let colorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
-        colorItem.submenu = colorMenu
+        let colorItem = NSMenuItem(title: preferences.isColorPickerOpen ? "Close Color Picker" : "Pick Color…",
+                                   action: #selector(toggleColorPicker), keyEquivalent: "")
+        colorItem.target = self
         menu.addItem(colorItem)
 
         // Backdrop submenu
@@ -230,10 +223,8 @@ final class MenuBarManager {
         preferences.dotOpacity = Double(sender.tag) / 100.0
     }
 
-    @objc private func setColor(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let color = DotColor(rawValue: raw) else { return }
-        preferences.dotColor = color
+    @objc private func toggleColorPicker() {
+        preferences.isColorPickerOpen.toggle()
     }
 
     @objc private func setBackdrop(_ sender: NSMenuItem) {
