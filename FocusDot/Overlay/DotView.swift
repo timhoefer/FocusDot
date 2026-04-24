@@ -1,4 +1,16 @@
 import SwiftUI
+import AppKit
+
+/// Desaturate + darken a SwiftUI color so it reads as "seen in low light".
+private func subdued(_ color: Color) -> Color {
+    let ns = NSColor(color).usingColorSpace(.sRGB) ?? NSColor(color)
+    var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+    ns.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+    return Color(hue: Double(h),
+                 saturation: Double(s) * 0.55,
+                 brightness: Double(b) * 0.50,
+                 opacity: Double(a))
+}
 
 private func makeNoiseImage(size: Int = 64) -> CGImage? {
     var pixels = [UInt8](repeating: 0, count: size * size * 4)
@@ -20,8 +32,22 @@ struct DotView: View {
     @ObservedObject var preferences: PreferencesManager
     @ObservedObject var animator: BounceAnimator
     @ObservedObject var interaction: InteractionManager
+    @ObservedObject var wallpaperSampler: WallpaperSampler
 
     var body: some View {
+        if preferences.isRepositionMode {
+            RepositionPlaceholder(
+                dotSize: preferences.dotSize,
+                color: preferences.dotColor.color,
+                onConfirm: { preferences.confirmReposition() }
+            )
+        } else {
+            ballBody
+        }
+    }
+
+    @ViewBuilder
+    private var ballBody: some View {
         let interactionPull = interaction.deformation.pull
         let activePull: CGSize = interaction.deformation.isGrabbed || interaction.deformation.jigglePhase > 0
             ? interactionPull
@@ -30,7 +56,8 @@ struct DotView: View {
                 height: animator.pull.height + interactionPull.height
             )
 
-        let baseColor = preferences.dotColor.color
+        let isDark = preferences.isEffectivelyDark
+        let baseColor = isDark ? subdued(preferences.dotColor.color) : preferences.dotColor.color
         let dotSize = preferences.dotSize
         let blob = BlobShape(pull: activePull, grabWidth: interaction.deformation.grabWidth)
 
@@ -40,10 +67,17 @@ struct DotView: View {
         let lightX: CGFloat = 0.35
         let lightY: CGFloat = 0.3
 
+        // Highlight nudges in the direction of pull — fakes the lit surface "leaning"
+        // with the deformation. Specular sharpens slightly when the skin is taut.
+        let shiftFactor: CGFloat = 0.22
+        let dynLightX = lightX + (activePull.width  / max(dotSize, 1)) * shiftFactor
+        let dynLightY = lightY + (activePull.height / max(dotSize, 1)) * shiftFactor
+        let specBoost: CGFloat = min(pullMag / dotSize, 1.0) * 0.10
+
         ZStack {
             blob.fill(baseColor)
 
-            // 3D lighting — shifts with deformation toward the light-facing side
+            // Key light — top-left, the dominant directional light. Diffuse + shadow falloff.
             blob.fill(
                 RadialGradient(
                     gradient: Gradient(stops: [
@@ -53,22 +87,62 @@ struct DotView: View {
                         .init(color: .black.opacity(0.06), location: 0.85),
                         .init(color: .black.opacity(0.12), location: 1.0),
                     ]),
-                    center: UnitPoint(x: lightX, y: lightY),
+                    center: UnitPoint(x: dynLightX, y: dynLightY),
                     startRadius: 0,
                     endRadius: dotSize * 0.55
                 )
             )
 
-            // Specular highlight — follows the light center
+            // Fill light — softer, broader, from directly above. Slightly cool to feel sky-like.
             blob.fill(
                 RadialGradient(
-                    gradient: Gradient(colors: [.white.opacity(0.3), .white.opacity(0.0)]),
-                    center: UnitPoint(x: lightX + 0.02, y: lightY + 0.02),
+                    gradient: Gradient(stops: [
+                        .init(color: Color(red: 0.92, green: 0.96, blue: 1.0).opacity(0.16), location: 0.0),
+                        .init(color: Color(red: 0.92, green: 0.96, blue: 1.0).opacity(0.06), location: 0.45),
+                        .init(color: .clear, location: 0.85),
+                    ]),
+                    center: UnitPoint(x: 0.5, y: 0.05),
+                    startRadius: 0,
+                    endRadius: dotSize * 0.75
+                )
+            )
+
+            // Key specular — small, bright, follows the key light.
+            blob.fill(
+                RadialGradient(
+                    gradient: Gradient(colors: [.white.opacity(0.3 + specBoost), .white.opacity(0.0)]),
+                    center: UnitPoint(x: dynLightX + 0.02, y: dynLightY + 0.02),
                     startRadius: 0,
                     endRadius: dotSize * 0.13
                 )
             )
 
+            // Fill specular — small soft sheen near the top, hints at the second light.
+            blob.fill(
+                RadialGradient(
+                    gradient: Gradient(colors: [.white.opacity(0.18), .white.opacity(0.0)]),
+                    center: UnitPoint(x: 0.5, y: 0.10),
+                    startRadius: 0,
+                    endRadius: dotSize * 0.10
+                )
+            )
+
+            // Bounce light from the desktop, picked up on the shadow-side rim.
+            if #available(macOS 14, *), preferences.isAmbientShadingEnabled {
+                blob.fill(
+                    RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: wallpaperSampler.ambientColor.opacity(0.55), location: 0.0),
+                            .init(color: wallpaperSampler.ambientColor.opacity(0.30), location: 0.4),
+                            .init(color: .clear, location: 0.95),
+                        ]),
+                        center: UnitPoint(x: 1 - lightX + 0.20, y: 1 - lightY + 0.20),
+                        startRadius: 0,
+                        endRadius: dotSize * 0.9
+                    )
+                )
+                .animation(.easeInOut(duration: 0.25), value: wallpaperSampler.ambientColor)
+            }
 
             // Depression effect — lighting depends on where on the ball you press.
             // Concavity inverts the surface normal: bright areas darken, dark areas lighten.
@@ -180,8 +254,10 @@ struct DotView: View {
             }
         }
         .compositingGroup()
+        // Dim the whole composite in dark mode so white speculars don't pop against the muted base.
+        .colorMultiply(isDark ? Color(white: 0.65) : .white)
         .frame(width: dotSize, height: dotSize)
-        .scaleEffect(interaction.deformation.squish)
+        .scaleEffect(interaction.deformation.squish * animator.visibilityScale)
         .background(
             Group {
                 if preferences.backdrop != .none {
@@ -205,4 +281,40 @@ struct DotView: View {
         .frame(width: 200, height: 200)
     }
 
+}
+
+/// Placeholder shown during reposition mode: a dotted outline where the dot will land,
+/// plus a confirm button. Drag handling stays in InteractionManager (drag anywhere on
+/// the dot circle moves it).
+private struct RepositionPlaceholder: View {
+    let dotSize: CGFloat
+    let color: Color
+    let onConfirm: () -> Void
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(
+                    color.opacity(0.7),
+                    style: StrokeStyle(lineWidth: 1.5, dash: [3, 3])
+                )
+                .background(Circle().fill(color.opacity(0.08)))
+                .frame(width: dotSize, height: dotSize)
+
+            Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
+                .font(.system(size: max(8, dotSize * 0.35), weight: .semibold))
+                .foregroundStyle(color.opacity(0.85))
+
+            Button(action: onConfirm) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 22, weight: .medium))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .green)
+                    .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+            }
+            .buttonStyle(.plain)
+            .offset(x: dotSize / 2 + 18, y: 0)
+        }
+        .frame(width: 200, height: 200)
+    }
 }

@@ -20,7 +20,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cameraManager: CameraManager!
     private var appDetector: AppDetector!
     private var menuBarManager: MenuBarManager!
+    private var wallpaperSampler: WallpaperSampler!
     private var cancellables = Set<AnyCancellable>()
+
+    static let ambientPollingInterval: TimeInterval = 0.15   // ~6–7 fps
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         preferences = PreferencesManager.shared
@@ -28,12 +31,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         interactionManager = InteractionManager()
         cameraManager = CameraManager()
         appDetector = AppDetector()
+        wallpaperSampler = WallpaperSampler()
 
         overlayWindow = DotOverlayWindow(
             preferences: preferences,
             animator: animator,
-            interactionManager: interactionManager
+            interactionManager: interactionManager,
+            wallpaperSampler: wallpaperSampler
         )
+
+        // Re-sample when displays change (screen arrangement, resolution, wallpaper swap often coincides)
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.wallpaperSampler.invalidateFilterCache()
+            self?.overlayWindow.refreshAmbient()
+        }
+
+        // After waking from sleep, dynamic wallpapers may have shifted to a different
+        // time-of-day variant. macOS may also have invalidated our poll timer.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, self.preferences.isAmbientShadingEnabled else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let self else { return }
+                self.wallpaperSampler.startPolling(every: AppDelegate.ambientPollingInterval)
+                self.overlayWindow.refreshAmbient()
+            }
+        }
+
+        preferences.$isAmbientShadingEnabled
+            .sink { [weak self] enabled in
+                guard let self else { return }
+                if enabled {
+                    self.wallpaperSampler.startPolling(every: AppDelegate.ambientPollingInterval)
+                    self.overlayWindow.refreshAmbient()
+                } else {
+                    self.wallpaperSampler.stopPolling()
+                }
+            }
+            .store(in: &cancellables)
 
         // Pause bouncing during grab, resume on release
         interactionManager.onGrabBegan = { [weak self] in
@@ -48,10 +90,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.overlayWindow.moveDotTo(screenPoint: screenPoint)
         }
 
-        // Sync reposition mode flag
         preferences.$isRepositionMode
             .sink { [weak self] mode in
                 self?.interactionManager.isRepositionMode = mode
+                self?.overlayWindow.setRepositionMode(mode)
             }
             .store(in: &cancellables)
 
@@ -73,6 +115,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 } else {
                     self?.overlayWindow.hideDot()
                 }
+            },
+            onRefreshAmbient: { [weak self] in
+                self?.wallpaperSampler.invalidateFilterCache()
+                self?.overlayWindow.refreshAmbient()
             }
         )
 

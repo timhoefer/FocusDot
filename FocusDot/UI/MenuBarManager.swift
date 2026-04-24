@@ -8,6 +8,7 @@ final class MenuBarManager {
     private let cameraManager: CameraManager
     private let appDetector: AppDetector
     private var onToggleDot: ((Bool) -> Void)?
+    private var onRefreshAmbient: (() -> Void)?
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -15,13 +16,15 @@ final class MenuBarManager {
         animator: BounceAnimator,
         cameraManager: CameraManager,
         appDetector: AppDetector,
-        onToggleDot: @escaping (Bool) -> Void
+        onToggleDot: @escaping (Bool) -> Void,
+        onRefreshAmbient: @escaping () -> Void
     ) {
         self.preferences = preferences
         self.animator = animator
         self.cameraManager = cameraManager
         self.appDetector = appDetector
         self.onToggleDot = onToggleDot
+        self.onRefreshAmbient = onRefreshAmbient
 
         setupStatusItem()
 
@@ -34,6 +37,9 @@ final class MenuBarManager {
             preferences.$dotOpacity.map { _ in () }.eraseToAnyPublisher(),
             preferences.$dotColor.map { _ in () }.eraseToAnyPublisher(),
             preferences.$backdrop.map { _ in () }.eraseToAnyPublisher(),
+            preferences.$appearanceMode.map { _ in () }.eraseToAnyPublisher(),
+            preferences.$isSystemDark.map { _ in () }.eraseToAnyPublisher(),
+            preferences.$isAmbientShadingEnabled.map { _ in () }.eraseToAnyPublisher(),
             preferences.$isRepositionMode.map { _ in () }.eraseToAnyPublisher(),
             cameraManager.$isCameraActive.map { _ in () }.eraseToAnyPublisher(),
             appDetector.$isVideoCallAppRunning.map { _ in () }.eraseToAnyPublisher()
@@ -133,13 +139,35 @@ final class MenuBarManager {
         backdropItem.submenu = backdropMenu
         menu.addItem(backdropItem)
 
+        let appearanceMenu = NSMenu()
+        for mode in AppearanceMode.allCases {
+            let item = NSMenuItem(title: mode.label, action: #selector(setAppearanceMode(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = preferences.appearanceMode == mode ? .on : .off
+            appearanceMenu.addItem(item)
+        }
+        let appearanceItem = NSMenuItem(title: "Appearance", action: nil, keyEquivalent: "")
+        appearanceItem.submenu = appearanceMenu
+        menu.addItem(appearanceItem)
+
+        if #available(macOS 14, *) {
+            let ambientItem = NSMenuItem(title: "Ambient from Desktop", action: #selector(toggleAmbient), keyEquivalent: "")
+            ambientItem.target = self
+            ambientItem.state = preferences.isAmbientShadingEnabled ? .on : .off
+            menu.addItem(ambientItem)
+
+            if preferences.isAmbientShadingEnabled {
+                let refreshItem = NSMenuItem(title: "Refresh Ambient", action: #selector(refreshAmbient), keyEquivalent: "")
+                refreshItem.target = self
+                menu.addItem(refreshItem)
+            }
+        }
+
         menu.addItem(NSMenuItem.separator())
 
         if preferences.isRepositionMode {
-            let confirmItem = NSMenuItem(title: "Confirm Position", action: #selector(confirmReposition), keyEquivalent: "\r")
-            confirmItem.target = self
-            menu.addItem(confirmItem)
-
+            // Confirm is the inline check button on the placeholder; only Cancel here as a safety hatch.
             let cancelItem = NSMenuItem(title: "Cancel Reposition", action: #selector(cancelReposition), keyEquivalent: "\u{1b}")
             cancelItem.target = self
             menu.addItem(cancelItem)
@@ -148,7 +176,6 @@ final class MenuBarManager {
             repoItem.target = self
             menu.addItem(repoItem)
 
-            // Reset position (only visible when a custom position is set)
             if preferences.customPosition != nil {
                 let resetItem = NSMenuItem(title: "Reset Position", action: #selector(resetPosition), keyEquivalent: "r")
                 resetItem.target = self
@@ -215,29 +242,52 @@ final class MenuBarManager {
         preferences.backdrop = bd
     }
 
-    @objc private func enterRepositionMode() {
-        // Save current position so we can revert on cancel
-        preferences.preRepositionPosition = preferences.customPosition
-        preferences.pendingPosition = nil
-        preferences.isRepositionMode = true
+    @objc private func setAppearanceMode(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let mode = AppearanceMode(rawValue: raw) else { return }
+        preferences.appearanceMode = mode
     }
 
-    @objc private func confirmReposition() {
-        // Save the pending position as the new custom position
-        if let pending = preferences.pendingPosition {
-            preferences.customPosition = pending
+    @objc private func toggleAmbient() {
+        if preferences.isAmbientShadingEnabled {
+            preferences.isAmbientShadingEnabled = false
+            return
         }
-        preferences.pendingPosition = nil
-        preferences.preRepositionPosition = nil
-        preferences.isRepositionMode = false
+
+        // Prime once before triggering the system Screen Recording prompt.
+        let alreadyGranted = CGPreflightScreenCaptureAccess()
+        if !alreadyGranted && !preferences.hasSeenAmbientPriming {
+            let alert = NSAlert()
+            alert.messageText = "Enable Ambient Shading?"
+            alert.informativeText = """
+                FocusDot will read a small patch of pixels around the dot from your desktop and tint the dot's shadow side with that color — like an object catching light from its surroundings.
+
+                macOS will ask you to grant Screen Recording permission. FocusDot only reads pixels around the dot, never any audio, and nothing is sent anywhere — all processing happens locally on your Mac.
+
+                After granting permission you may need to quit and relaunch FocusDot.
+                """
+            alert.addButton(withTitle: "Continue")
+            alert.addButton(withTitle: "Cancel")
+
+            let response = alert.runModal()
+            preferences.hasSeenAmbientPriming = true
+            guard response == .alertFirstButtonReturn else { return }
+        }
+
+        preferences.isAmbientShadingEnabled = true
+        onRefreshAmbient?()
+    }
+
+    @objc private func refreshAmbient() {
+        onRefreshAmbient?()
+    }
+
+    @objc private func enterRepositionMode() {
+        preferences.enterRepositionMode()
     }
 
     @objc private func cancelReposition() {
-        // Revert to the position before entering reposition mode
-        preferences.customPosition = preferences.preRepositionPosition
-        preferences.pendingPosition = nil
-        preferences.preRepositionPosition = nil
-        preferences.isRepositionMode = false
+        preferences.cancelReposition()
         NotificationCenter.default.post(name: .resetDotPosition, object: nil)
     }
 

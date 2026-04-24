@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import AppKit
 
 enum DotColor: String, CaseIterable {
     case green, red, blue, yellow, white, cyan, orange, pink, peach, coffee
@@ -35,6 +36,18 @@ enum Backdrop: String, CaseIterable {
     }
 }
 
+enum AppearanceMode: String, CaseIterable {
+    case light, dark, system
+
+    var label: String {
+        switch self {
+        case .light:  return "Light"
+        case .dark:   return "Dark"
+        case .system: return "Follow System"
+        }
+    }
+}
+
 final class PreferencesManager: ObservableObject {
     static let shared = PreferencesManager()
 
@@ -59,11 +72,55 @@ final class PreferencesManager: ObservableObject {
     @Published var backdrop: Backdrop {
         didSet { UserDefaults.standard.set(backdrop.rawValue, forKey: "backdrop") }
     }
+    @Published var appearanceMode: AppearanceMode {
+        didSet { UserDefaults.standard.set(appearanceMode.rawValue, forKey: "appearanceMode") }
+    }
+    @Published var isAmbientShadingEnabled: Bool {
+        didSet { UserDefaults.standard.set(isAmbientShadingEnabled, forKey: "isAmbientShadingEnabled") }
+    }
+    /// True once the user has seen our priming modal explaining the Screen Recording permission.
+    var hasSeenAmbientPriming: Bool {
+        get { UserDefaults.standard.bool(forKey: "hasSeenAmbientPriming") }
+        set { UserDefaults.standard.set(newValue, forKey: "hasSeenAmbientPriming") }
+    }
+    /// Live macOS system appearance (only meaningful when appearanceMode == .system).
+    @Published private(set) var isSystemDark: Bool = false
+
+    /// Resolved dark state given the current mode and system appearance.
+    var isEffectivelyDark: Bool {
+        switch appearanceMode {
+        case .light:  return false
+        case .dark:   return true
+        case .system: return isSystemDark
+        }
+    }
     @Published var isRepositionMode: Bool = false
     /// Temporarily stores the position during reposition mode before confirmation
     var pendingPosition: CGPoint? = nil
     /// The position before entering reposition mode, for cancellation
     var preRepositionPosition: CGPoint? = nil
+    func enterRepositionMode() {
+        preRepositionPosition = customPosition
+        pendingPosition = nil
+        isRepositionMode = true
+    }
+
+    func confirmReposition() {
+        if let pending = pendingPosition {
+            customPosition = pending
+        }
+        pendingPosition = nil
+        preRepositionPosition = nil
+        isRepositionMode = false
+    }
+
+    func cancelReposition() {
+        customPosition = preRepositionPosition
+        pendingPosition = nil
+        preRepositionPosition = nil
+        isRepositionMode = false
+    }
+
     @Published var customPosition: CGPoint? {
         didSet {
             if let p = customPosition {
@@ -101,11 +158,35 @@ final class PreferencesManager: ObservableObject {
         self.isBouncingEnabled = defaults.bool(forKey: "isBouncingEnabled")
         self.isDotVisible = defaults.bool(forKey: "isDotVisible")
         self.backdrop = Backdrop(rawValue: defaults.string(forKey: "backdrop") ?? "") ?? .none
+        self.appearanceMode = AppearanceMode(rawValue: defaults.string(forKey: "appearanceMode") ?? "") ?? .system
+        if defaults.object(forKey: "isAmbientShadingEnabled") == nil {
+            defaults.set(true, forKey: "isAmbientShadingEnabled")
+        }
+        self.isAmbientShadingEnabled = defaults.bool(forKey: "isAmbientShadingEnabled")
         if defaults.bool(forKey: "hasCustomPosition") {
             self.customPosition = CGPoint(
                 x: defaults.double(forKey: "customPositionX"),
                 y: defaults.double(forKey: "customPositionY")
             )
+        }
+
+        refreshSystemAppearance()
+        // macOS posts this on the distributed center when the user toggles Light/Dark.
+        DistributedNotificationCenter.default.addObserver(
+            self,
+            selector: #selector(refreshSystemAppearance),
+            name: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil
+        )
+    }
+
+    @objc private func refreshSystemAppearance() {
+        let match = NSApp?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+        let dark = (match == .darkAqua)
+        if dark != isSystemDark {
+            DispatchQueue.main.async { [weak self] in
+                self?.isSystemDark = dark
+            }
         }
     }
 }

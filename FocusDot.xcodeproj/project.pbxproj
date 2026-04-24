@@ -19,6 +19,7 @@
 		A10010 /* InteractionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10013 /* InteractionManager.swift */; };
 		A10011 /* BlobShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014 /* BlobShape.swift */; };
 		A10012 /* SceneBallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10015 /* SceneBallView.swift */; };
+		A10016 /* WallpaperSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10019 /* WallpaperSampler.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +38,7 @@
 		B10013 /* InteractionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionManager.swift; sourceTree = "<group>"; };
 		B10014 /* BlobShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobShape.swift; sourceTree = "<group>"; };
 		B10015 /* SceneBallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneBallView.swift; sourceTree = "<group>"; };
+		B10019 /* WallpaperSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperSampler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -91,6 +93,7 @@
 			children = (
 				B10006 /* CameraManager.swift */,
 				B10007 /* AppDetector.swift */,
+				B10019 /* WallpaperSampler.swift */,
 			);
 			path = Detection;
 			sourceTree = "<group>";
@@ -199,6 +202,7 @@
 				A10010 /* InteractionManager.swift in Sources */,
 			A10011 /* BlobShape.swift in Sources */,
 			A10012 /* SceneBallView.swift in Sources */,
+			A10016 /* WallpaperSampler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
